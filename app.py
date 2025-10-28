@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, Response
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+import base64
 
 # OCR optional deps (won't crash if missing)
 try:
@@ -13,16 +14,33 @@ try:
     _ocr_available = True
 except Exception:
     _ocr_available = False
+def load_service_account_info():
+    raw = os.getenv("GOOGLE_CREDENTIALS", "")
+    if not raw:
+        raise RuntimeError("Missing GOOGLE_CREDENTIALS env")
+    raw = raw.strip()
 
+    # Se è JSON "in chiaro"
+    if raw.startswith("{"):
+        info = json.loads(raw)
+    else:
+        # altrimenti assume base64
+        info = json.loads(base64.b64decode(raw).decode("utf-8"))
+
+    # Normalizza la private_key: trasforma \\n in newline reali
+    pk = info.get("private_key", "")
+    if "\\n" in pk:
+        info["private_key"] = pk.replace("\\n", "\n")
+    return info
 
 # === ENV ===
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 FOLDER_ID = os.getenv("GOOGLE_FOLDER_ID")
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "1800"))
-CREDENTIALS_INFO = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-BEARER_TOKEN = os.getenv("BEARER_TOKEN")  # <--- aggiungi su Render
+CREDENTIALS_INFO = load_service_account_info()   # <--- usa la funzione
+BEARER_TOKEN = os.getenv("BEARER_TOKEN")
 OCR_ENABLED = os.getenv("OCR_ENABLED", "0") == "1"
-lang=os.getenv("TESSERACT_LANG", "eng")
+lang = os.getenv("TESSERACT_LANG", "eng")
 LOG_VERBOSE = os.getenv("LOG_VERBOSE", "1") == "1"
 
 def vlog(msg: str):
@@ -38,6 +56,11 @@ GPT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 
 app = Flask(__name__)
 
+# In-memory caches
+_index = {}   # fileId -> {id,name,path,mimeType,modifiedTime}
+_recent = []  # lista degli ultimi file modificati (per /updates)
+
+
 def ensure_index_ready():
     # build initial index if empty
     global _index
@@ -52,9 +75,6 @@ def ensure_index_ready():
         except Exception as e:
             print("Initial index error:", e)
 
-# In-memory caches
-_index = {}   # fileId -> {id,name,path,mimeType,modifiedTime}
-_recent = []  # lista degli ultimi file modificati (per /updates)
 
 # ---------- Utils ----------
 def bearer_ok(req):
@@ -360,6 +380,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
