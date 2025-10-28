@@ -101,15 +101,27 @@ def poll_loop():
     while True:
         try:
             new_index = build_index()
+
+            # Log tempo di inizio sync
+            print(f"[SYNC] Inizio sincronizzazione alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
             # detect diffs by modifiedTime
+            updated_count = 0
             for fid, meta in new_index.items():
                 if (fid not in _index) or (_index[fid].get("modifiedTime") != meta.get("modifiedTime")):
                     # nuovo o aggiornato
                     notify_openai(meta)
+                    updated_count += 1
+
             _index = new_index
             refresh_recent(_index)
+
+            # Log esito sync
+            print(f"[SYNC] Repository aggiornato alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — {updated_count} file nuovi/aggiornati")
+
         except Exception as e:
-            print("Poll error:", e)
+            print(f"[ERROR] Polling fallito alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {e}")
+
         time.sleep(POLL_SECONDS)
 
 def ensure_index_ready():
@@ -336,6 +348,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
