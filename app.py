@@ -320,12 +320,23 @@ def read():
 
 
 def start_background():
+    # Log di stato ambiente OCR e lingua (utile per controllare Render)
+    print("=== Flowagent V3 Repository Service ===")
+    print(f"OCR_ENABLED = {OCR_ENABLED}")
+    print(f"TESSERACT_LANG = {lang}")
+    print(f"GOOGLE_FOLDER_ID = {FOLDER_ID}")
+    print(f"POLL_SECONDS = {POLL_SECONDS}")
+    print("=======================================")
+
+    # Avvio thread di polling repository
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
+
 
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
