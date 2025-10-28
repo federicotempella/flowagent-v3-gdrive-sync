@@ -10,7 +10,7 @@ OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 FOLDER_ID = os.getenv("GOOGLE_FOLDER_ID")
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "1800"))
 CREDENTIALS_INFO = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-REPO_API_TOKEN = os.getenv("REPO_API_TOKEN")  # <--- aggiungi su Render
+BEARER_TOKEN= = os.getenv("BEARER_TOKEN")  # <--- aggiungi su Render
 
 # Google Drive client (metadata read)
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -226,4 +226,5 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
