@@ -97,32 +97,37 @@ def notify_openai(fileinfo):
         print("OpenAI notify error:", e)
 
 def poll_loop():
+    """Loop di sincronizzazione periodica del repository Google Drive."""
     global _index
     while True:
         try:
+            print(f"[SYNC] Inizio sincronizzazione alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             new_index = build_index()
 
-            # Log tempo di inizio sync
-            print(f"[SYNC] Inizio sincronizzazione alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-            # detect diffs by modifiedTime
-            updated_count = 0
+            updated_files = []
             for fid, meta in new_index.items():
                 if (fid not in _index) or (_index[fid].get("modifiedTime") != meta.get("modifiedTime")):
-                    # nuovo o aggiornato
                     notify_openai(meta)
-                    updated_count += 1
+                    updated_files.append({
+                        "name": meta.get("name"),
+                        "mimeType": meta.get("mimeType"),
+                        "modifiedTime": meta.get("modifiedTime")
+                    })
 
             _index = new_index
             refresh_recent(_index)
 
-            # Log esito sync
-            print(f"[SYNC] Repository aggiornato alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — {updated_count} file nuovi/aggiornati")
+            if updated_files:
+                print(f"[SYNC] Repository aggiornato alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — {len(updated_files)} file nuovi/aggiornati:")
+                for f in updated_files:
+                    print(f"   • {f['name']} ({f['mimeType']}) — modificato {f['modifiedTime']}")
+            else:
+                print(f"[SYNC] Nessun file nuovo/aggiornato alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         except Exception as e:
             print(f"[ERROR] Polling fallito alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {e}")
 
-        time.sleep(POLL_SECONDS)
+        time.sleep(POLL_SECONDS))
 
 def ensure_index_ready():
     # build initial index if empty
@@ -348,6 +353,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
