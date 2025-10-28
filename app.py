@@ -137,6 +137,7 @@ def poll_loop():
 
 def ensure_index_ready():
     # build initial index if empty
+    global _index
     if not _index:
         try:
             new_index = build_index()
@@ -144,7 +145,6 @@ def ensure_index_ready():
             for meta in new_index.values():
                 _recent.append(meta)
             refresh_recent(new_index)
-            global _index
             _index = new_index
         except Exception as e:
             print("Initial index error:", e)
@@ -359,6 +359,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
