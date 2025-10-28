@@ -376,10 +376,21 @@ def start_background():
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
 
-
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    """
+    Lightweight health check endpoint.
+    Returns 200 OK if the service is alive (no sync triggered).
+    """
+    return jsonify({
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }), 200
+    
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
