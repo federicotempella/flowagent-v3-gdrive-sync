@@ -38,6 +38,20 @@ GPT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 
 app = Flask(__name__)
 
+def ensure_index_ready():
+    # build initial index if empty
+    global _index
+    if not _index:
+        try:
+            new_index = build_index()
+            # publish
+            for meta in new_index.values():
+                _recent.append(meta)
+            refresh_recent(new_index)
+            _index = new_index
+        except Exception as e:
+            print("Initial index error:", e)
+
 # In-memory caches
 _index = {}   # fileId -> {id,name,path,mimeType,modifiedTime}
 _recent = []  # lista degli ultimi file modificati (per /updates)
@@ -135,19 +149,6 @@ def poll_loop():
 
         time.sleep(POLL_SECONDS)   # <-- tolta la parentesi extra
 
-def ensure_index_ready():
-    # build initial index if empty
-    global _index
-    if not _index:
-        try:
-            new_index = build_index()
-            # publish
-            for meta in new_index.values():
-                _recent.append(meta)
-            refresh_recent(new_index)
-            _index = new_index
-        except Exception as e:
-            print("Initial index error:", e)
 
 # ---------- Readers ----------
 def read_google_doc_text(file_id):
@@ -359,6 +360,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
