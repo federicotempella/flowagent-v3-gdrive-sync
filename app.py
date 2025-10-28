@@ -23,6 +23,7 @@ CREDENTIALS_INFO = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 BEARER_TOKEN = os.getenv("BEARER_TOKEN")  # <--- aggiungi su Render
 OCR_ENABLED = os.getenv("OCR_ENABLED", "0") == "1"
 lang=os.getenv("TESSERACT_LANG", "eng")
+LOG_VERBOSE = os.getenv("LOG_VERBOSE", "1") == "1"
 
 # Google Drive client (metadata read)
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -353,6 +354,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
