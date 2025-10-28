@@ -25,6 +25,10 @@ OCR_ENABLED = os.getenv("OCR_ENABLED", "0") == "1"
 lang=os.getenv("TESSERACT_LANG", "eng")
 LOG_VERBOSE = os.getenv("LOG_VERBOSE", "1") == "1"
 
+def vlog(msg: str):
+    if LOG_VERBOSE:
+        print(msg)
+
 # Google Drive client (metadata read)
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 creds = service_account.Credentials.from_service_account_info(CREDENTIALS_INFO, scopes=SCOPES)
@@ -42,7 +46,7 @@ _recent = []  # lista degli ultimi file modificati (per /updates)
 def bearer_ok(req):
     auth = req.headers.get("Authorization", "")
     if not (BEARER_TOKEN and auth.startswith("Bearer ") and auth.split(" ", 1)[1] == BEARER_TOKEN):
-        print("[WARN] Unauthorized request or missing BEARER_TOKEN")
+        vlog("[WARN] Unauthorized request or missing BEARER_TOKEN")
         return False
     return True
 
@@ -102,7 +106,7 @@ def poll_loop():
     global _index
     while True:
         try:
-            print(f"[SYNC] Inizio sincronizzazione alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            vlog(f"[SYNC] Inizio sincronizzazione alle {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             new_index = build_index()
 
             updated_files = []
@@ -119,16 +123,17 @@ def poll_loop():
             refresh_recent(_index)
 
             if updated_files:
-                print(f"[SYNC] Repository aggiornato alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — {len(updated_files)} file nuovi/aggiornati:")
+                vlog(f"[SYNC] Repository aggiornato alle {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} — {len(updated_files)} file nuovi/aggiornati:")
                 for f in updated_files:
-                    print(f"   • {f['name']} ({f['mimeType']}) — modificato {f['modifiedTime']}")
+                    vlog(f"   • {f['name']} ({f['mimeType']}) — modificato {f['modifiedTime']}")
             else:
-                print(f"[SYNC] Nessun file nuovo/aggiornato alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                vlog(f"[SYNC] Nessun file nuovo/aggiornato alle {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         except Exception as e:
-            print(f"[ERROR] Polling fallito alle {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {e}")
+            # gli errori li lascio SEMPRE a video, anche se LOG_VERBOSE=0
+            print(f"[ERROR] Polling fallito alle {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {e}")
 
-        time.sleep(POLL_SECONDS))
+        time.sleep(POLL_SECONDS)   # <-- tolta la parentesi extra
 
 def ensure_index_ready():
     # build initial index if empty
@@ -242,7 +247,7 @@ def ocr_image_bytes(img_bytes):
         return ""
     try:
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        return pytesseract.image_to_string(img)
+        return pytesseract.image_to_string(img, lang=os.getenv("TESSERACT_LANG", "eng"))
     except Exception:
         return ""
 
@@ -339,12 +344,12 @@ def read():
 
 def start_background():
     # Log di stato ambiente OCR e lingua (utile per controllare Render)
-    print("=== Flowagent V3 Repository Service ===")
-    print(f"OCR_ENABLED = {OCR_ENABLED}")
-    print(f"TESSERACT_LANG = {lang}")
-    print(f"GOOGLE_FOLDER_ID = {FOLDER_ID}")
-    print(f"POLL_SECONDS = {POLL_SECONDS}")
-    print("=======================================")
+    vlog("=== Flowagent V3 Repository Service ===")
+    vlog(f"OCR_ENABLED = {OCR_ENABLED}")
+    vlog(f"TESSERACT_LANG = {lang}")
+    vlog(f"GOOGLE_FOLDER_ID = {FOLDER_ID}")
+    vlog(f"POLL_SECONDS = {POLL_SECONDS}")
+    vlog("=======================================")
 
     # Avvio thread di polling repository
     t = threading.Thread(target=poll_loop, daemon=True)
@@ -354,6 +359,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
