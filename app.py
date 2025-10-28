@@ -1,67 +1,223 @@
-import os, io, time, json, threading, requests
+import os, io, time, json, threading, requests, re
 from datetime import datetime
-from flask import Flask
+from flask import Flask, request, jsonify, Response
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 
-# === CONFIG ===
+# === ENV ===
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 FOLDER_ID = os.getenv("GOOGLE_FOLDER_ID")
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "1800"))
 CREDENTIALS_INFO = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+REPO_API_TOKEN = os.getenv("REPO_API_TOKEN")  # <--- aggiungi su Render
 
-SCOPES = ["https://www.googleapis.com/auth/drive.metadata.readonly"]
+# Google Drive client (metadata read)
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 creds = service_account.Credentials.from_service_account_info(CREDENTIALS_INFO, scopes=SCOPES)
 drive = build("drive", "v3", credentials=creds)
+
 GPT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
 
 app = Flask(__name__)
-_seen = {}
 
-def list_files(folder_id):
-    query = f"'{folder_id}' in parents and trashed=false"
-    results = drive.files().list(q=query, fields="files(id,name,modifiedTime,mimeType)").execute()
-    files = results.get("files", [])
-    for f in list(files):
-        if f["mimeType"] == "application/vnd.google-apps.folder":
-            files.extend(list_files(f["id"]))
-    return files
+# In-memory caches
+_index = {}   # fileId -> {id,name,path,mimeType,modifiedTime}
+_recent = []  # lista degli ultimi file modificati (per /updates)
 
-def notify_gpt(fileinfo):
-    name = fileinfo["name"]
-    mod = fileinfo["modifiedTime"]
-    msg = f"[Flowagent V3] Updated file: {name} (lastModified={mod})"
-    print(msg)
-    headers = {"Authorization": f"Bearer {OPENAI_KEY}"}
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role":"system","content":"Flowagent V3 repository update – refresh knowledge if needed."},
-            {"role":"user","content": msg}
-        ]
-    }
+# ---------- Utils ----------
+def bearer_ok(req):
+    auth = req.headers.get("Authorization", "")
+    return REPO_API_TOKEN and auth.startswith("Bearer ") and auth.split(" ", 1)[1] == REPO_API_TOKEN
+
+def list_children(folder_id):
+    # lista immediata dei figli
+    q = f"'{folder_id}' in parents and trashed=false"
+    fields = "files(id,name,mimeType,modifiedTime)"
+    res = drive.files().list(q=q, fields=fields, pageSize=200).execute()
+    return res.get("files", [])
+
+def build_index():
+    # ricorsivo su cartelle
+    stack = [(FOLDER_ID, "")]
+    new_index = {}
+    while stack:
+        parent_id, prefix = stack.pop()
+        for item in list_children(parent_id):
+            fid = item["id"]
+            name = item["name"]
+            mime = item["mimeType"]
+            path = f"{prefix}/{name}".lstrip("/")
+            mod  = item.get("modifiedTime", "")
+            new_index[fid] = {"id": fid, "name": name, "mimeType": mime, "path": path, "modifiedTime": mod}
+            if mime == "application/vnd.google-apps.folder":
+                stack.append((fid, path))
+    return new_index
+
+def refresh_recent(new_index):
+    global _recent
+    # prendi i top 100 per data modifica
+    vals = list(new_index.values())
+    vals.sort(key=lambda x: x.get("modifiedTime",""), reverse=True)
+    _recent = vals[:100]
+
+def notify_openai(fileinfo):
+    if not OPENAI_KEY:  # opzionale
+        return
+    msg = f"[Flowagent V3] Updated file: {fileinfo['path']} (lastModified={fileinfo['modifiedTime']})"
     try:
-        requests.post(GPT_ENDPOINT, headers=headers, json=payload, timeout=30)
+        requests.post(
+            GPT_ENDPOINT,
+            headers={"Authorization": f"Bearer {OPENAI_KEY}"},
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role":"system","content":"Flowagent V3 repository update – refresh knowledge if needed."},
+                    {"role":"user","content": msg}
+                ]
+            },
+            timeout=20
+        )
     except Exception as e:
-        print("Notify error:", e)
+        print("OpenAI notify error:", e)
 
 def poll_loop():
+    global _index
     while True:
         try:
-            files = list_files(FOLDER_ID)
-            files.sort(key=lambda x: x["modifiedTime"], reverse=True)
-            for f in files[:50]:
-                fid, mod = f["id"], f["modifiedTime"]
-                if _seen.get(fid) != mod:
-                    _seen[fid] = mod
-                    notify_gpt(f)
+            new_index = build_index()
+            # detect diffs by modifiedTime
+            for fid, meta in new_index.items():
+                if (fid not in _index) or (_index[fid].get("modifiedTime") != meta.get("modifiedTime")):
+                    # nuovo o aggiornato
+                    notify_openai(meta)
+            _index = new_index
+            refresh_recent(_index)
         except Exception as e:
             print("Poll error:", e)
         time.sleep(POLL_SECONDS)
 
+def ensure_index_ready():
+    # build initial index if empty
+    if not _index:
+        try:
+            new_index = build_index()
+            # publish
+            for meta in new_index.values():
+                _recent.append(meta)
+            refresh_recent(new_index)
+            global _index
+            _index = new_index
+        except Exception as e:
+            print("Initial index error:", e)
+
+# ---------- Readers ----------
+def read_google_doc_text(file_id):
+    # export Google Docs/Sheets/Slides to text/plain when possible
+    try:
+        req = drive.files().export_media(fileId=file_id, mimeType="text/plain")
+        buf = io.BytesIO()
+        downloader = MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        return buf.getvalue().decode("utf-8", errors="ignore")
+    except Exception as e:
+        raise
+
+def download_file_bytes(file_id):
+    req = drive.files().get_media(fileId=file_id)
+    buf = io.BytesIO()
+    downloader = MediaIoBaseDownload(buf, req)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    return buf.getvalue()
+
+def extract_text_from_bytes(mime, data):
+    # naive extraction: txt direct; docx via python-docx; pdf via pdfminer
+    if mime in ("text/plain", "application/json", "application/xml"):
+        try:
+            return data.decode("utf-8", errors="ignore")
+        except Exception:
+            return data.decode("latin-1", errors="ignore")
+    if mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        try:
+            from docx import Document
+            bio = io.BytesIO(data)
+            doc = Document(bio)
+            return "\n".join([p.text for p in doc.paragraphs])
+        except Exception as e:
+            return ""
+    if mime == "application/pdf":
+        try:
+            from pdfminer.high_level import extract_text
+            bio = io.BytesIO(data)
+            return extract_text(bio)
+        except Exception:
+            return ""
+    # fallback: return empty (non text)
+    return ""
+
+# ---------- Routes ----------
 @app.route("/")
-def ok():
-    return "Flowagent V3 Google Drive Sync active"
+def health():
+    return "Flowagent V3 Repository API active"
+
+@app.route("/updates")
+def updates():
+    if not bearer_ok(request):
+        return jsonify({"error":"unauthorized"}), 401
+    return jsonify({"files": _recent})
+
+@app.route("/search")
+def search():
+    if not bearer_ok(request):
+        return jsonify({"error":"unauthorized"}), 401
+    ensure_index_ready()
+    q = (request.args.get("q") or "").strip()
+    limit = max(1, min(int(request.args.get("limit", "10")), 50))
+    if not q:
+        return jsonify({"files": _recent[:limit]})
+    pattern = re.compile(re.escape(q), re.IGNORECASE)
+    hits = [m for m in _index.values() if pattern.search(m["name"]) or pattern.search(m["path"])]
+    # ordina per recency
+    hits.sort(key=lambda x: x.get("modifiedTime",""), reverse=True)
+    return jsonify({"files": hits[:limit]})
+
+@app.route("/read")
+def read():
+    if not bearer_ok(request):
+        return jsonify({"error":"unauthorized"}), 401
+    ensure_index_ready()
+    fid = request.args.get("id")
+    if not fid or fid not in _index:
+        return jsonify({"error":"missing_or_unknown_id"}), 400
+    meta = _index[fid]
+    mime = meta["mimeType"]
+
+    # Google Workspace file → export to text
+    if mime.startswith("application/vnd.google-apps."):
+        try:
+            text = read_google_doc_text(fid)
+            return Response(text, mimetype="text/plain; charset=utf-8")
+        except Exception:
+            return jsonify({"error":"export_failed"}), 500
+
+    # Binary files (pdf, docx, txt, etc.)
+    try:
+        data = download_file_bytes(fid)
+    except Exception:
+        return jsonify({"error":"download_failed"}), 500
+
+    text = extract_text_from_bytes(mime, data)
+    if text.strip():
+        return Response(text, mimetype="text/plain; charset=utf-8")
+    # se non estraibile, ritorna info base
+    return jsonify({
+        "id": fid, "name": meta["name"], "mimeType": mime,
+        "message": "Unable to extract text; consider converting to Google Docs or uploading TXT."
+    })
 
 def start_background():
     t = threading.Thread(target=poll_loop, daemon=True)
@@ -70,3 +226,4 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
