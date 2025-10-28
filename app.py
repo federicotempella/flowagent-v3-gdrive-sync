@@ -22,6 +22,7 @@ POLL_SECONDS = int(os.getenv("POLL_SECONDS", "1800"))
 CREDENTIALS_INFO = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 BEARER_TOKEN = os.getenv("BEARER_TOKEN")  # <--- aggiungi su Render
 OCR_ENABLED = os.getenv("OCR_ENABLED", "0") == "1"
+lang=os.getenv("TESSERACT_LANG", "eng")
 
 # Google Drive client (metadata read)
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
@@ -196,10 +197,11 @@ def extract_text_from_bytes(mime, data):
 
 def ocr_images(images):
     """OCR su una lista di immagini PIL -> testo concatenato"""
+    lang = os.getenv("TESSERACT_LANG", "eng")
     text_chunks = []
     for img in images:
         try:
-            text = pytesseract.image_to_string(img)
+            text = pytesseract.image_to_string(img, lang=lang)
             if text:
                 text_chunks.append(text)
         except Exception:
@@ -324,6 +326,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
