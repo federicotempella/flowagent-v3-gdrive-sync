@@ -6,3 +6,6 @@ google-auth-httplib2
 google-auth-oauthlib
 python-docx
 pdfminer.six
+pytesseract
+Pillow
+pdf2image
