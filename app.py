@@ -28,7 +28,10 @@ _recent = []  # lista degli ultimi file modificati (per /updates)
 # ---------- Utils ----------
 def bearer_ok(req):
     auth = req.headers.get("Authorization", "")
-    return REPO_API_TOKEN and auth.startswith("Bearer ") and auth.split(" ", 1)[1] == REPO_API_TOKEN
+    if not (BEARER_TOKEN and auth.startswith("Bearer ") and auth.split(" ", 1)[1] == BEARER_TOKEN):
+        print("[WARN] Unauthorized request or missing BEARER_TOKEN")
+        return False
+    return True
 
 def list_children(folder_id):
     # lista immediata dei figli
@@ -226,6 +229,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
