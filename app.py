@@ -5,6 +5,16 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
+# OCR optional deps (won't crash if missing)
+try:
+    import pytesseract
+    from pdf2image import convert_from_bytes
+    from PIL import Image
+    _ocr_available = True
+except Exception:
+    _ocr_available = False
+
+
 # === ENV ===
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 FOLDER_ID = os.getenv("GOOGLE_FOLDER_ID")
@@ -230,6 +240,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
