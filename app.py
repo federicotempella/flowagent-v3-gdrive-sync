@@ -256,36 +256,66 @@ def search():
 @app.route("/read")
 def read():
     if not bearer_ok(request):
-        return jsonify({"error":"unauthorized"}), 401
+        return jsonify({"error": "unauthorized"}), 401
+
     ensure_index_ready()
     fid = request.args.get("id")
     if not fid or fid not in _index:
-        return jsonify({"error":"missing_or_unknown_id"}), 400
+        return jsonify({"error": "missing_or_unknown_id"}), 400
+
     meta = _index[fid]
     mime = meta["mimeType"]
 
-    # Google Workspace file → export to text
+    # Google Workspace file → export to text (es. Google Docs)
     if mime.startswith("application/vnd.google-apps."):
         try:
             text = read_google_doc_text(fid)
-            return Response(text, mimetype="text/plain; charset=utf-8")
+            if text and text.strip():
+                return Response(text, mimetype="text/plain; charset=utf-8")
+            # Se export ok ma vuoto/illeggibile:
+            return jsonify({
+                "id": fid, "name": meta["name"], "mimeType": mime,
+                "message": "Export to text returned empty content. Consider converting the document or pasting plain text."
+            }), 200
         except Exception:
-            return jsonify({"error":"export_failed"}), 500
+            return jsonify({"error": "export_failed"}), 500
 
-    # Binary files (pdf, docx, txt, etc.)
+    # File binari (pdf, docx, txt, immagini, ecc.)
     try:
         data = download_file_bytes(fid)
     except Exception:
-        return jsonify({"error":"download_failed"}), 500
+        return jsonify({"error": "download_failed"}), 500
 
+    # 1) Tentativo di estrazione testo 'normale'
     text = extract_text_from_bytes(mime, data)
     if text.strip():
         return Response(text, mimetype="text/plain; charset=utf-8")
-    # se non estraibile, ritorna info base
+
+    # 2) Se non estraibile, verifica se avrebbe senso l'OCR
+    needs_ocr = mime in ("application/pdf", "image/jpeg", "image/png", "image/tiff")
+
+    # Se l’OCR è abilitato via ENV ma le dipendenze non ci sono:
+    if needs_ocr and OCR_ENABLED and not _ocr_available:
+        return jsonify({
+            "id": fid, "name": meta["name"], "mimeType": mime,
+            "message": "Unable to extract text automatically. OCR may be required but is not available in this environment. "
+                       "Enable OCR (set OCR_ENABLED=1) with Tesseract+Poppler in the image, or convert to Google Docs/TXT."
+        }), 200
+
+    # Se l’OCR non è abilitato:
+    if needs_ocr and not OCR_ENABLED:
+        return jsonify({
+            "id": fid, "name": meta["name"], "mimeType": mime,
+            "message": "Unable to extract text automatically. This file likely requires OCR. "
+                       "Enable OCR (set OCR_ENABLED=1) and deploy with Tesseract+Poppler, or convert to Google Docs/TXT."
+        }), 200
+
+    # Caso generale: non testuale / non gestibile
     return jsonify({
         "id": fid, "name": meta["name"], "mimeType": mime,
         "message": "Unable to extract text; consider converting to Google Docs or uploading TXT."
-    })
+    }), 200
+
 
 def start_background():
     t = threading.Thread(target=poll_loop, daemon=True)
@@ -294,6 +324,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
