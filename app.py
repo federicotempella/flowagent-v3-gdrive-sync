@@ -149,29 +149,83 @@ def download_file_bytes(file_id):
     return buf.getvalue()
 
 def extract_text_from_bytes(mime, data):
-    # naive extraction: txt direct; docx via python-docx; pdf via pdfminer
+    # 1) percorsi testuali "normali"
     if mime in ("text/plain", "application/json", "application/xml"):
         try:
             return data.decode("utf-8", errors="ignore")
         except Exception:
             return data.decode("latin-1", errors="ignore")
+
     if mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         try:
             from docx import Document
             bio = io.BytesIO(data)
             doc = Document(bio)
             return "\n".join([p.text for p in doc.paragraphs])
-        except Exception as e:
+        except Exception:
             return ""
+
     if mime == "application/pdf":
+        # prima tentiamo estrazione testo nativa
         try:
             from pdfminer.high_level import extract_text
             bio = io.BytesIO(data)
-            return extract_text(bio)
+            t = extract_text(bio) or ""
         except Exception:
-            return ""
-    # fallback: return empty (non text)
+            t = ""
+        if t.strip():
+            return t
+        # fallback OCR se abilitato e possibile
+        if OCR_ENABLED:
+            t = ocr_pdf_bytes(data)
+            if t.strip():
+                return t
+        return ""
+
+    # immagini: prova OCR
+    if mime in ("image/jpeg", "image/png", "image/tiff"):
+        if OCR_ENABLED:
+            t = ocr_image_bytes(data)
+            if t.strip():
+                return t
+        return ""
+
+    # fallback: non gestibile
     return ""
+
+
+def ocr_images(images):
+    """OCR su una lista di immagini PIL -> testo concatenato"""
+    text_chunks = []
+    for img in images:
+        try:
+            text = pytesseract.image_to_string(img)
+            if text:
+                text_chunks.append(text)
+        except Exception:
+            pass
+    return "\n".join(t for t in text_chunks if t and t.strip())
+
+def ocr_pdf_bytes(pdf_bytes):
+    """Converte PDF in immagini e fa OCR; richiede poppler + tesseract nel sistema."""
+    if not _ocr_available:
+        return ""
+    try:
+        images = convert_from_bytes(pdf_bytes, dpi=200)  # può richiedere poppler
+        return ocr_images(images)
+    except Exception:
+        return ""
+
+def ocr_image_bytes(img_bytes):
+    """OCR su un’immagine singola (jpeg/png)."""
+    if not _ocr_available:
+        return ""
+    try:
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        return pytesseract.image_to_string(img)
+    except Exception:
+        return ""
+
 
 # ---------- Routes ----------
 @app.route("/")
@@ -240,6 +294,7 @@ def start_background():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
