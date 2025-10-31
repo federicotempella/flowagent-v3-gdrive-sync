@@ -49,7 +49,7 @@ def vlog(msg: str):
         print(msg)
 
 # Google Drive client (metadata read)
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 creds = service_account.Credentials.from_service_account_info(CREDENTIALS_INFO, scopes=SCOPES)
 drive = build("drive", "v3", credentials=creds)
 
@@ -300,6 +300,49 @@ def search():
     hits.sort(key=lambda x: x.get("modifiedTime",""), reverse=True)
     return jsonify({"files": hits[:limit]})
 
+@app.route("/write", methods=["POST"])
+def write():
+    if not bearer_ok(request):
+        return jsonify({"error": "unauthorized"}), 401
+
+    payload = request.get_json(force=True)
+    rel_path = payload.get("path", "").strip()
+    content = payload.get("content")
+    overwrite = payload.get("overwrite", True)
+
+    if not rel_path or not content:
+        return jsonify({"error": "missing path or content"}), 400
+
+    try:
+        filename = os.path.basename(rel_path)
+        media_body = MediaIoBaseUpload(
+            io.BytesIO(json.dumps(content, indent=2).encode("utf-8")),
+            mimetype="application/json"
+        )
+
+        # Controllo se esiste già
+        query = f"name = '{filename}' and trashed = false and '{FOLDER_ID}' in parents"
+        existing = drive.files().list(q=query, spaces="drive", fields="files(id, name)").execute().get("files", [])
+
+        if existing and not overwrite:
+            return jsonify({"error": "file already exists and overwrite=false"}), 409
+
+        if existing:
+            file_id = existing[0]["id"]
+            drive.files().update(fileId=file_id, media_body=media_body).execute()
+        else:
+            file_metadata = {
+                "name": filename,
+                "parents": [FOLDER_ID],
+                "mimeType": "application/json"
+            }
+            drive.files().create(body=file_metadata, media_body=media_body).execute()
+
+        return jsonify({"status": "success", "message": f"File salvato: {rel_path}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/read")
 def read():
     if not bearer_ok(request):
@@ -385,57 +428,15 @@ def healthz():
     """
     return jsonify({
         "status": "ok",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now().astimezone().isoformat()
     }), 200
     
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
 
-@app.route("/write", methods=["POST"])
-def write():
-    if not bearer_ok(request):
-        return jsonify({"error": "unauthorized"}), 401
 
-    payload = request.get_json(force=True)
-    rel_path = payload.get("path", "").strip()
-    content = payload.get("content")
-    overwrite = payload.get("overwrite", True)
 
-    if not rel_path or not content:
-        return jsonify({"error": "missing path or content"}), 400
-
-    try:
-        # Check if file exists
-        query = f"name = '{os.path.basename(rel_path)}' and trashed = false and '{FOLDER_ID}' in parents"
-        response = drive.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
-        files = response.get("files", [])
-
-        if files and not overwrite:
-            return jsonify({"error": "file already exists and overwrite=false"}), 409
-
-        media_body = MediaIoBaseUpload(
-            io.BytesIO(json.dumps(content, indent=2).encode("utf-8")),
-            mimetype="application/json"
-        )
-
-        if files:
-            # Overwrite existing file
-            file_id = files[0]["id"]
-            drive.files().update(fileId=file_id, media_body=media_body).execute()
-        else:
-            # Create new file
-            file_metadata = {
-                "name": os.path.basename(rel_path),
-                "parents": [FOLDER_ID],
-                "mimeType": "application/json"
-            }
-            drive.files().create(body=file_metadata, media_body=media_body, fields="id").execute()
-
-        return jsonify({"status": "success", "message": f"File salvato: {rel_path}"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 
