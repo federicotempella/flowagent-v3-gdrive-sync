@@ -5,6 +5,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import base64
+from googleapiclient.http import MediaIoBaseUpload
 
 # OCR optional deps (won't crash if missing)
 try:
@@ -390,6 +391,51 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
+@app.route("/write", methods=["POST"])
+def write():
+    if not bearer_ok(request):
+        return jsonify({"error": "unauthorized"}), 401
+
+    payload = request.get_json(force=True)
+    rel_path = payload.get("path", "").strip()
+    content = payload.get("content")
+    overwrite = payload.get("overwrite", True)
+
+    if not rel_path or not content:
+        return jsonify({"error": "missing path or content"}), 400
+
+    try:
+        # Check if file exists
+        query = f"name = '{os.path.basename(rel_path)}' and trashed = false and '{FOLDER_ID}' in parents"
+        response = drive.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
+        files = response.get("files", [])
+
+        if files and not overwrite:
+            return jsonify({"error": "file already exists and overwrite=false"}), 409
+
+        media_body = MediaIoBaseUpload(
+            io.BytesIO(json.dumps(content, indent=2).encode("utf-8")),
+            mimetype="application/json"
+        )
+
+        if files:
+            # Overwrite existing file
+            file_id = files[0]["id"]
+            drive.files().update(fileId=file_id, media_body=media_body).execute()
+        else:
+            # Create new file
+            file_metadata = {
+                "name": os.path.basename(rel_path),
+                "parents": [FOLDER_ID],
+                "mimeType": "application/json"
+            }
+            drive.files().create(body=file_metadata, media_body=media_body, fields="id").execute()
+
+        return jsonify({"status": "success", "message": f"File salvato: {rel_path}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 
