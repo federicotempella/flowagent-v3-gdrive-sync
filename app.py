@@ -313,6 +313,13 @@ def write():
     if not rel_path or content is None:
         return jsonify({"error": "missing path or content"}), 400
 
+    # ✅ Se content è una stringa (serializzata da GPT), prova a parsarlo
+    if isinstance(content, str):
+        try:
+            content = json.loads(content)
+        except Exception:
+            return jsonify({"error": "Invalid JSON string in content"}), 400
+
     try:
         filename = os.path.basename(rel_path)
         media_body = MediaIoBaseUpload(
@@ -342,6 +349,7 @@ def write():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/read")
 def read():
@@ -434,6 +442,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
