@@ -307,16 +307,16 @@ def write():
 
     payload = request.get_json(force=True)
     rel_path = payload.get("path", "").strip()
-    content = payload.get("content")
+    content = payload.get("content", None)
     overwrite = payload.get("overwrite", True)
 
-    if not rel_path or not content:
+    if not rel_path or content is None:
         return jsonify({"error": "missing path or content"}), 400
 
     try:
         filename = os.path.basename(rel_path)
         media_body = MediaIoBaseUpload(
-            io.BytesIO(json.dumps(content, indent=2).encode("utf-8")),
+            io.BytesIO(json.dumps(content, indent=2, ensure_ascii=False).encode("utf-8")),
             mimetype="application/json"
         )
 
@@ -434,6 +434,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
