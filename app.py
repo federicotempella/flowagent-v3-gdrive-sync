@@ -427,6 +427,10 @@ def start_background():
     # Avvio thread di polling repository
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
+    
+@app.route("/openapi.yaml")
+def serve_openapi_spec():
+    return send_from_directory(".", "openapi.yaml", mimetype="application/yaml")
 
 @app.route("/healthz", methods=["GET"])
 def healthz():
@@ -442,6 +446,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
