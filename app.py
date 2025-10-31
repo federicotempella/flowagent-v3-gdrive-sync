@@ -428,9 +428,9 @@ def start_background():
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
     
-@app.route("/openapi.yaml")
-def serve_openapi_spec_wellknown():
-    return send_from_directory(".", "openapi.yaml", mimetype="application/yaml")
+@app.route("/.well-known/openapi.yaml")
+def serve_openapi_spec():
+    return send_from_directory(".well-known", "openapi.yaml", mimetype="application/yaml")
 
 @app.route("/.well-known/ai-plugin.json")
 def serve_plugin_manifest():
@@ -458,6 +458,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
