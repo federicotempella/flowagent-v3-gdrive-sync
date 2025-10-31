@@ -9,10 +9,11 @@
   },
   "api": {
     "type": "openapi",
-    "url": "https://flowagent-v3-gdrive-sync.onrender.com/openapi.yaml",
+    "url": "https://flowagent-v3-gdrive-sync.onrender.com/.well-known/openapi.yaml",
     "is_user_authenticated": true
   },
   "logo_url": "https://flowagent-v3-gdrive-sync.onrender.com/logo.png",
   "contact_email": "dev@flowagent.com",
   "legal_info_url": "https://flowagent.com/legal"
 }
+
