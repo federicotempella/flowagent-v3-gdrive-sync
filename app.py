@@ -432,6 +432,15 @@ def start_background():
 def serve_openapi_spec():
     return send_from_directory(".", "openapi.yaml", mimetype="application/yaml")
 
+@app.route("/.well-known/ai-plugin.json")
+def serve_plugin_manifest():
+    """
+    Serve il manifest del plugin per ChatGPT.
+    Deve essere accessibile via: /.well-known/ai-plugin.json
+    """
+    return send_from_directory(".well-known", "ai-plugin.json", mimetype="application/json")
+
+
 @app.route("/healthz", methods=["GET"])
 def healthz():
     """
@@ -446,6 +455,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
