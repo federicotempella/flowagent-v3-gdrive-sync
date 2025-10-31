@@ -7,7 +7,7 @@ info:
     Usato dal GPT Flowagent Research per scrivere il file di recap con i dati raccolti.
 
 servers:
-  - url: https://flowagent-v3-gdrive-sync.onrender.com
+  - url: https://flowagent-v3-gdrive-sync.onrender.com/
 
 paths:
   /write:
