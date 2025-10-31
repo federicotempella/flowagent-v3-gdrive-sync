@@ -300,55 +300,6 @@ def search():
     hits.sort(key=lambda x: x.get("modifiedTime",""), reverse=True)
     return jsonify({"files": hits[:limit]})
 
-@app.route("/write", methods=["POST"])
-def write():
-    if not bearer_ok(request):
-        return jsonify({"error": "unauthorized"}), 401
-
-    payload = request.get_json(force=True)
-    rel_path = payload.get("path", "").strip()
-    content = payload.get("content", None)
-    overwrite = payload.get("overwrite", True)
-
-    if not rel_path or content is None:
-        return jsonify({"error": "missing path or content"}), 400
-
-    # ✅ Se content è una stringa (serializzata da GPT), prova a parsarlo
-    if isinstance(content, str):
-        try:
-            content = json.loads(content)
-        except Exception:
-            return jsonify({"error": "Invalid JSON string in content"}), 400
-
-    try:
-        filename = os.path.basename(rel_path)
-        media_body = MediaIoBaseUpload(
-            io.BytesIO(json.dumps(content, indent=2, ensure_ascii=False).encode("utf-8")),
-            mimetype="application/json"
-        )
-
-        # Controllo se esiste già
-        query = f"name = '{filename}' and trashed = false and '{FOLDER_ID}' in parents"
-        existing = drive.files().list(q=query, spaces="drive", fields="files(id, name)").execute().get("files", [])
-
-        if existing and not overwrite:
-            return jsonify({"error": "file already exists and overwrite=false"}), 409
-
-        if existing:
-            file_id = existing[0]["id"]
-            drive.files().update(fileId=file_id, media_body=media_body).execute()
-        else:
-            file_metadata = {
-                "name": filename,
-                "parents": [FOLDER_ID],
-                "mimeType": "application/json"
-            }
-            drive.files().create(body=file_metadata, media_body=media_body).execute()
-
-        return jsonify({"status": "success", "message": f"File salvato: {rel_path}"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 @app.route("/upload", methods=["POST"])
 def upload_json_to_drive():
     if not bearer_ok(request):
@@ -500,6 +451,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
