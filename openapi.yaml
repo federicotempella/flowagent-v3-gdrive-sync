@@ -1,0 +1,52 @@
+openapi: 3.1.0
+info:
+  title: Flowagent V3 – GDrive Writer
+  version: "1.0.0"
+  description: |
+    Endpoint per ricevere e salvare un file JSON nel repository sincronizzato con Google Drive.
+    Usato dal GPT Flowagent Research per scrivere il file di recap con i dati raccolti.
+
+servers:
+  - url: https://flowagent-v3-gdrive-sync.onrender.com
+
+paths:
+  /write:
+    post:
+      operationId: driveWrite
+      summary: Salva un file JSON nel repository GDrive
+      x-openai-is-trusted: true
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                  description: Percorso relativo del file da creare
+                content:
+                  type: object
+                  description: Contenuto JSON del file da salvare
+                overwrite:
+                  type: boolean
+                  default: true
+              required:
+                - path
+                - content
+      responses:
+        '200':
+          description: File salvato correttamente
+        '400':
+          description: Parametri mancanti o errati
+        '500':
+          description: Errore interno del server
+
+components:
+  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
