@@ -429,6 +429,10 @@ def start_background():
     t.start()
     
 @app.route("/openapi.yaml")
+def serve_openapi_spec_wellknown():
+    return send_from_directory(".", "openapi.yaml", mimetype="application/yaml")
+
+@app.route("/openapi.yaml")
 def serve_openapi_spec():
     return send_from_directory(".", "openapi.yaml", mimetype="application/yaml")
 
@@ -440,6 +444,9 @@ def serve_plugin_manifest():
     """
     return send_from_directory(".well-known", "ai-plugin.json", mimetype="application/json")
 
+@app.route("/.well-known/logo.png")
+def serve_logo():
+    return send_from_directory(".well-known", "logo.png", mimetype="image/png")
 
 @app.route("/healthz", methods=["GET"])
 def healthz():
@@ -455,6 +462,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
