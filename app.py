@@ -431,14 +431,10 @@ def healthz():
         "timestamp": datetime.now().astimezone().isoformat()
     }), 200
 
-@app.route("/openapi.yaml")
-def openapi_yaml():
-    return Response(open("openapi.yaml").read(), mimetype="text/yaml")
-
-    
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
