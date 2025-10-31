@@ -349,6 +349,48 @@ def write():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+@app.route("/upload", methods=["POST"])
+def upload_json_to_drive():
+    if not bearer_ok(request):
+        return jsonify({"error": "unauthorized"}), 401
+
+    payload = request.get_json(force=True)
+    rel_path = payload.get("path", "").strip()
+    content = payload.get("content")
+
+    if not rel_path or content is None:
+        return jsonify({"error": "missing path or content"}), 400
+
+    try:
+        filename = os.path.basename(rel_path)
+
+        # Prepara il contenuto JSON come stream in memoria
+        media_body = MediaIoBaseUpload(
+            io.BytesIO(json.dumps(content, indent=2, ensure_ascii=False).encode("utf-8")),
+            mimetype="application/json"
+        )
+
+        # Verifica se esiste già un file con lo stesso nome
+        query = f"name = '{filename}' and trashed = false and '{FOLDER_ID}' in parents"
+        existing = drive.files().list(q=query, spaces="drive", fields="files(id, name)").execute().get("files", [])
+
+        if existing:
+            # Sovrascrive il file
+            file_id = existing[0]["id"]
+            drive.files().update(fileId=file_id, media_body=media_body).execute()
+        else:
+            # Crea nuovo file nella cartella FOLDER_ID
+            file_metadata = {
+                "name": filename,
+                "parents": [FOLDER_ID],
+                "mimeType": "application/json"
+            }
+            drive.files().create(body=file_metadata, media_body=media_body).execute()
+
+        return jsonify({"status": "success", "message": f"File salvato: {rel_path}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/read")
@@ -458,6 +500,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
