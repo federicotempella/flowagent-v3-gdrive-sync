@@ -277,7 +277,7 @@ def ocr_image_bytes(img_bytes):
 # ---------- Routes ----------
 @app.route("/")
 def health():
-    return "Flowagent V3 Repository API active"
+    return "OK", 200
 
 @app.route("/updates")
 def updates():
@@ -451,6 +451,7 @@ def healthz():
 if __name__ == "__main__":
     start_background()
     app.run(host="0.0.0.0", port=10000)
+
 
 
 
