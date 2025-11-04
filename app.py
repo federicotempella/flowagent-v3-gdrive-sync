@@ -449,8 +449,8 @@ def healthz():
     }), 200
 
 if __name__ == "__main__":
-    start_background()
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
+    app.run(host="0.0.0.0", port=port)
 
 
 
