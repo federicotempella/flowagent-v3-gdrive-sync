@@ -300,37 +300,41 @@ def search():
     hits.sort(key=lambda x: x.get("modifiedTime",""), reverse=True)
     return jsonify({"files": hits[:limit]})
 
-@app.route("/upload", methods=["POST"])
+import traceback  # aggiungilo se non presente già in alto
+
+@app.route("/upload", methods=["POST"]) 
 def upload_json_to_drive():
     if not bearer_ok(request):
         return jsonify({"error": "unauthorized"}), 401
 
-    payload = request.get_json(force=True)
-    rel_path = payload.get("path", "").strip()
-    content = payload.get("content")
-
-    if not rel_path or content is None:
-        return jsonify({"error": "missing path or content"}), 400
-
     try:
+        payload = request.get_json(force=True)
+
+        rel_path = payload.get("path", "").strip()
+        content = payload.get("content")
+
+        print("=== UPLOAD REQUEST ===")
+        print("Path:", rel_path)
+        print("Content (short preview):", str(content)[:500])
+        print("======================")
+
+        if not rel_path or content is None:
+            return jsonify({"error": "missing path or content"}), 400
+
         filename = os.path.basename(rel_path)
 
-        # Prepara il contenuto JSON come stream in memoria
         media_body = MediaIoBaseUpload(
             io.BytesIO(json.dumps(content, indent=2, ensure_ascii=False).encode("utf-8")),
             mimetype="application/json"
         )
 
-        # Verifica se esiste già un file con lo stesso nome
         query = f"name = '{filename}' and trashed = false and '{FOLDER_ID}' in parents"
         existing = drive.files().list(q=query, spaces="drive", fields="files(id, name)").execute().get("files", [])
 
         if existing:
-            # Sovrascrive il file
             file_id = existing[0]["id"]
             drive.files().update(fileId=file_id, media_body=media_body).execute()
         else:
-            # Crea nuovo file nella cartella FOLDER_ID
             file_metadata = {
                 "name": filename,
                 "parents": [FOLDER_ID],
@@ -341,6 +345,7 @@ def upload_json_to_drive():
         return jsonify({"status": "success", "message": f"File salvato: {rel_path}"}), 200
 
     except Exception as e:
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
@@ -451,6 +456,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
