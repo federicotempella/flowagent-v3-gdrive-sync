@@ -10,4 +10,6 @@ pytesseract
 Pillow
 pdf2image
 uvicorn
+gunicorn
+
 
