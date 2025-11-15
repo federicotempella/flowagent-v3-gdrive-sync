@@ -20,8 +20,9 @@ services:
         sync: false
       - key: OCR_ENABLED
         value: "1"
-      - key: GSHEET_ID
+      - key: GOOGLE_SHEET_ID
         sync: false
+
 
 
 
