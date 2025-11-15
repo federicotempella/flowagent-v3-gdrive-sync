@@ -23,7 +23,9 @@ services:
       - key: GOOGLE_SHEET_ID
         sync: false
       - key: GOOGLE_SHEET_NAME
-        sync: Sheet1
+        value: Sheet1
+        sync: falese
+
 
 
 
