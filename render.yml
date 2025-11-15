@@ -20,5 +20,10 @@ services:
         sync: false
       - key: OCR_ENABLED
         value: "1"
+      - key: GSHEET_CREDS_JSON
+        sync: false
+      - key: GSHEET_ID
+        sync: false
+
 
 
