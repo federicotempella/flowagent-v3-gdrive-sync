@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import base64
 import traceback
+import gspread
 from googleapiclient.http import MediaIoBaseUpload
 
 # OCR optional deps (won't crash if missing)
@@ -170,6 +171,100 @@ def poll_loop():
             print(f"[ERROR] Polling fallito alle {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {e}")
 
         time.sleep(POLL_SECONDS)   # <-- tolta la parentesi extra
+
+def get_sheet():
+    creds_info = json.loads(os.getenv("GSHEET_CREDS_JSON"))
+    creds = service_account.Credentials.from_service_account_info(
+        creds_info,
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    client = gspread.authorize(creds)
+    sheet_id = os.getenv("GSHEET_ID")
+    return client.open_by_key(sheet_id).sheet1
+
+@app.route("/triggers/save", methods=["POST"])
+def save_triggers():
+    try:
+        payload = request.get_json(force=True)
+
+        company_slug = payload.get("company_slug")
+        person_slug = payload.get("person_slug")
+
+        if not company_slug or not person_slug:
+            return jsonify({"error": "missing slugs"}), 400
+
+        sheet = get_sheet()
+        rows = sheet.get_all_records()
+        row_index = None
+
+        for idx, r in enumerate(rows, start=2):  # riga 1 = header
+            if r.get("company_slug") == company_slug and r.get("person_slug") == person_slug:
+                row_index = idx
+                break
+
+        row = [
+            payload.get("company_slug", ""),
+            payload.get("company_name", ""),
+            payload.get("person_slug", ""),
+            payload.get("person_name", ""),
+            payload.get("role", ""),
+            json.dumps(payload.get("company_triggers", {}), ensure_ascii=False),
+            json.dumps(payload.get("company_extra_triggers", {}), ensure_ascii=False),
+            json.dumps(payload.get("people", []), ensure_ascii=False),
+            json.dumps(payload.get("weak_company_triggers", []), ensure_ascii=False),
+            json.dumps(payload.get("weak_people_triggers", []), ensure_ascii=False),
+            json.dumps(payload.get("sources", {}), ensure_ascii=False),
+            datetime.now().isoformat()
+        ]
+
+        if row_index:
+            sheet.update(f"A{row_index}:L{row_index}", [row])
+        else:
+            sheet.append_row(row)
+
+        return jsonify({"status": "ok"}), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/triggers/get", methods=["GET"])
+def get_triggers():
+    company_slug = request.args.get("company_slug")
+    person_slug = request.args.get("person_slug")
+
+    if not company_slug or not person_slug:
+        return jsonify({"error": "missing slugs"}), 400
+
+    try:
+        sheet = get_sheet()
+        rows = sheet.get_all_records()
+
+        for r in rows:
+            if r["company_slug"] == company_slug and r["person_slug"] == person_slug:
+                return jsonify({
+                    "found": True,
+                    "data": {
+                        "company_slug": r["company_slug"],
+                        "company_name": r["company_name"],
+                        "person_slug": r["person_slug"],
+                        "person_name": r["person_name"],
+                        "role": r["role"],
+                        "company_triggers": json.loads(r["company_triggers"]),
+                        "company_extra_triggers": json.loads(r["company_extra_triggers"]),
+                        "people": json.loads(r["people"]),
+                        "weak_company_triggers": json.loads(r["weak_company_triggers"]),
+                        "weak_people_triggers": json.loads(r["weak_people_triggers"]),
+                        "sources": json.loads(r["sources"]),
+                        "last_updated": r["last_updated"]
+                    }
+                }), 200
+
+        return jsonify({"found": False}), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------- Readers ----------
@@ -457,6 +552,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
