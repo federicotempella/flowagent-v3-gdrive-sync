@@ -22,6 +22,9 @@ services:
         value: "1"
       - key: GOOGLE_SHEET_ID
         sync: false
+      - key: GOOGLE_SHEET_NAME=
+        sync: Sheet1
+
 
 
 
