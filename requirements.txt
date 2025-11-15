@@ -11,5 +11,6 @@ Pillow
 pdf2image
 uvicorn
 gunicorn
+gspread
 
 
