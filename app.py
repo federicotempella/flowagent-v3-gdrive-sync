@@ -173,11 +173,20 @@ def poll_loop():
         time.sleep(POLL_SECONDS)   # <-- tolta la parentesi extra
 
 def get_sheet():
-    creds_info = json.loads(os.getenv("GSHEET_CREDS_JSON"))
+    raw = os.getenv("GSHEET_CREDS_JSON")
+    
+    # Decodifica base64 se necessario
+    try:
+        creds_info = json.loads(raw)
+    except json.JSONDecodeError:
+        decoded = base64.b64decode(raw).decode("utf-8")
+        creds_info = json.loads(decoded)
+
     creds = service_account.Credentials.from_service_account_info(
         creds_info,
         scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
+
     client = gspread.authorize(creds)
     sheet_id = os.getenv("GSHEET_ID")
     return client.open_by_key(sheet_id).sheet1
@@ -550,6 +559,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
