@@ -174,7 +174,7 @@ def poll_loop():
 
 def get_sheet():
     raw = os.getenv("GSHEET_CREDS_JSON")
-    
+
     # Decodifica base64 se necessario
     try:
         creds_info = json.loads(raw)
@@ -189,7 +189,23 @@ def get_sheet():
 
     client = gspread.authorize(creds)
     sheet_id = os.getenv("GSHEET_ID")
-    return client.open_by_key(sheet_id).sheet1
+
+    try:
+        sheet_file = client.open_by_key(sheet_id)
+        sheet_names = sheet_file.worksheets()
+        print("Fogli disponibili:", [ws.title for ws in sheet_names])  # DEBUG
+
+        # Prova a caricare "Foglio1"
+        try:
+            return sheet_file.worksheet("Foglio1")
+        except gspread.exceptions.WorksheetNotFound:
+            print("⚠️ Foglio 'Foglio1' non trovato. Uso il primo foglio disponibile come fallback.")
+            return sheet_names[0]
+
+    except gspread.exceptions.SpreadsheetNotFound:
+        raise Exception("❌ Il file Google Sheets specificato non è stato trovato (ID errato o permessi).")
+
+
 
 # ---------- Readers ----------
 def read_google_doc_text(file_id):
@@ -559,6 +575,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
