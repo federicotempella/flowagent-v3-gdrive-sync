@@ -404,23 +404,28 @@ def save_triggers():
                 row_index = idx
                 break
 
+        now = datetime.now().strftime("%Y-%m-%d")
+
         row = [
             payload.get("company_slug", ""),
             payload.get("company_name", ""),
             payload.get("person_slug", ""),
             payload.get("person_name", ""),
             payload.get("role", ""),
+            now,  # research_date
             json.dumps(payload.get("company_triggers", {}), ensure_ascii=False),
             json.dumps(payload.get("company_extra_triggers", {}), ensure_ascii=False),
             json.dumps(payload.get("people", []), ensure_ascii=False),
+            json.dumps(payload.get("people_extra_triggers", {}), ensure_ascii=False),
             json.dumps(payload.get("weak_company_triggers", []), ensure_ascii=False),
             json.dumps(payload.get("weak_people_triggers", []), ensure_ascii=False),
             json.dumps(payload.get("sources", {}), ensure_ascii=False),
-            datetime.now().isoformat()
+            json.dumps(payload, ensure_ascii=False)  # json_full (backup completo)
         ]
 
+        # aggiorna o aggiunge
         if row_index:
-            sheet.update(f"A{row_index}:L{row_index}", [row])
+            sheet.update(f"A{row_index}:N{row_index}", [row])
         else:
             sheet.append_row(row)
 
@@ -587,6 +592,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
