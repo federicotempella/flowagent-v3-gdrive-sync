@@ -188,7 +188,7 @@ def get_sheet():
     )
 
     client = gspread.authorize(creds)
-    sheet_id = os.getenv("GSHEET_ID")
+    sheet_id = os.getenv("GOOGLE_SHEET_ID")
 
     try:
         sheet_file = client.open_by_key(sheet_id)
@@ -575,6 +575,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
