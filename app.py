@@ -383,6 +383,7 @@ def upload_json_to_drive():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+        
 @app.route("/triggers/save", methods=["POST"])
 def save_triggers():
     try:
@@ -431,6 +432,17 @@ def save_triggers():
 
 @app.route("/triggers/get", methods=["GET"])
 def get_triggers():
+    def safe_json_load(value):
+        try:
+            if value is None:
+                return {}
+            value = str(value).strip()
+            if not value:
+                return {}
+            return json.loads(value)
+        except Exception:
+            return {}
+
     company_slug = request.args.get("company_slug")
     person_slug = request.args.get("person_slug")
 
@@ -442,22 +454,22 @@ def get_triggers():
         rows = sheet.get_all_records()
 
         for r in rows:
-            if r["company_slug"] == company_slug and r["person_slug"] == person_slug:
+            if r.get("company_slug") == company_slug and r.get("person_slug") == person_slug:
                 return jsonify({
                     "found": True,
                     "data": {
-                        "company_slug": r["company_slug"],
-                        "company_name": r["company_name"],
-                        "person_slug": r["person_slug"],
-                        "person_name": r["person_name"],
-                        "role": r["role"],
-                        "company_triggers": json.loads(r["company_triggers"]),
-                        "company_extra_triggers": json.loads(r["company_extra_triggers"]),
-                        "people": json.loads(r["people"]),
-                        "weak_company_triggers": json.loads(r["weak_company_triggers"]),
-                        "weak_people_triggers": json.loads(r["weak_people_triggers"]),
-                        "sources": json.loads(r["sources"]),
-                        "last_updated": r["last_updated"]
+                        "company_slug": r.get("company_slug"),
+                        "company_name": r.get("company_name"),
+                        "person_slug": r.get("person_slug"),
+                        "person_name": r.get("person_name"),
+                        "role": r.get("role"),
+                        "company_triggers": safe_json_load(r.get("company_triggers")),
+                        "company_extra_triggers": safe_json_load(r.get("company_extra_triggers")),
+                        "people": safe_json_load(r.get("people")),
+                        "weak_company_triggers": safe_json_load(r.get("weak_company_triggers")),
+                        "weak_people_triggers": safe_json_load(r.get("weak_people_triggers")),
+                        "sources": safe_json_load(r.get("sources")),
+                        "last_updated": r.get("last_updated")
                     }
                 }), 200
 
@@ -575,6 +587,7 @@ def healthz():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # usa la porta fornita da Render
     app.run(host="0.0.0.0", port=port)
+
 
 
 
